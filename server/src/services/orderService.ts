@@ -8,7 +8,7 @@ import { adjustStockAtomic, restoreStockAtomic } from './bookService.js';
 import { env } from '../config/env.js';
 import { AppError, NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { Book, bookEffectivePrice } from '../models/Book.js';
-import { sendEmail } from './emailService.js';
+import { escapeEmailHtml, sendEmail } from './emailService.js';
 import { User } from '../models/User.js';
 import { logger } from '../utils/logger.js';
 
@@ -121,15 +121,21 @@ export async function createOrderFromCart(input: {
       const user = await User.findById(input.userId);
       if (user) {
         await sendEmail(
-          user.email,
-          `Order ${created.orderNumber} received`,
-          `<p>Thank you ${user.name}. Your order total is ₹${created.total}.</p>`,
+          {
+            to: user.email,
+            subject: `Order ${created.orderNumber} received`,
+            html: `<p>Thank you ${escapeEmailHtml(user.name)}. Your order total is ₹${created.total}.</p>`,
+          },
         );
       }
     } catch (error) {
-      logger.error('Order committed but confirmation email failed', {
+      logger.warn('Order committed but confirmation email was not accepted', {
+        operation: 'email.order_confirmation',
         orderId: String(created._id),
-        error,
+        errorCode:
+          error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+            ? error.code
+            : 'EMAIL_DELIVERY_FAILED',
       });
     }
     return created;

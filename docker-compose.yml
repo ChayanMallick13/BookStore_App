@@ -37,6 +37,8 @@ services:
       dockerfile: client/Dockerfile
     ports:
       - '5173:80'
+    environment:
+      API_PROXY_URL: http://server:5000
     depends_on:
       - server
 

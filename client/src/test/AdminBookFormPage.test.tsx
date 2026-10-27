@@ -52,7 +52,7 @@ describe('AdminBookFormPage', () => {
     fireEvent.change(screen.getByLabelText('Selling price (INR)'), { target: { value: '299' } });
     fireEvent.change(screen.getByLabelText('Available stock'), { target: { value: '8' } });
     fireEvent.change(screen.getByLabelText('Description'), {
-      target: { value: 'A thoughtful test title for the BookHaven catalog.' },
+      target: { value: 'A thoughtful test title for the Books Bin catalog.' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create book' }));
 

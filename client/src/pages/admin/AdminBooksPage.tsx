@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Eye, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Eye, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { Book } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -50,10 +50,21 @@ export function AdminBooksPage() {
         </Button>
       </div>
 
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
-        <Input className="pl-9" placeholder="Search by title or ISBN…" value={q} onChange={(e) => setQ(e.target.value)} />
-      </div>
+      <form className="storefront-admin-search" role="search" onSubmit={(event) => event.preventDefault()}>
+        <Search aria-hidden="true" />
+        <Input
+          aria-label="Search books by title or ISBN"
+          placeholder="Search by title or ISBN"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="storefront-admin-search-input"
+        />
+        {q && (
+          <button type="button" aria-label="Clear book search" onClick={() => setQ('')}>
+            <X aria-hidden="true" />
+          </button>
+        )}
+      </form>
 
       {isError && <p role="alert" className="rounded-lg bg-red-50 p-4 text-sm text-red-800">{error.message}</p>}
       {remove.isError && <p role="alert" className="rounded-lg bg-red-50 p-4 text-sm text-red-800">{remove.error.message}</p>}

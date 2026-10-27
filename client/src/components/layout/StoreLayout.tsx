@@ -21,7 +21,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn('storefront-nav-link', isActive && 'is-active');
 
 export function StoreLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, sessionError } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -29,6 +29,7 @@ export function StoreLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const categoryMenuRef = useRef<HTMLDetailsElement>(null);
+  const searchFormRef = useRef<HTMLFormElement>(null);
   const categoriesQuery = useQuery({
     queryKey: ['catalog-categories'],
     queryFn: async () => (await api.get<Category[]>('/catalog/categories')).data,
@@ -63,6 +64,17 @@ export function StoreLayout() {
     };
   }, []);
 
+  useEffect(() => {
+    function dismissSearch(event: PointerEvent) {
+      if (searchOpen && !searchFormRef.current?.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', dismissSearch);
+    return () => document.removeEventListener('pointerdown', dismissSearch);
+  }, [searchOpen]);
+
   async function handleLogout() {
     try {
       await logout();
@@ -95,9 +107,9 @@ export function StoreLayout() {
           <Link to="/catalog">Browse the collection <ArrowRight aria-hidden="true" /></Link>
         </div>
         <div className="storefront-header-main">
-          <Link to="/" className="storefront-brand" aria-label="BookHaven home">
+          <Link to="/" className="storefront-brand" aria-label="Books Bin home">
             <span className="storefront-brand-mark"><BookOpen aria-hidden="true" /></span>
-            <span>BookHaven<small>Independent bookstore</small></span>
+            <span>Books Bin<small>Independent bookstore</small></span>
           </Link>
 
           <nav className="storefront-desktop-nav" aria-label="Main navigation">
@@ -121,12 +133,13 @@ export function StoreLayout() {
           </nav>
 
           <div className="storefront-header-actions">
-            <form className={cn('storefront-search', searchOpen && 'is-open')} onSubmit={submitSearch}>
+            <form ref={searchFormRef} className={cn('storefront-search', searchOpen && 'is-open')} onSubmit={submitSearch}>
               {searchOpen && (
                 <input
                   aria-label="Search books"
                   autoFocus
                   placeholder="Title, author, or subject"
+                  maxLength={120}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   onKeyDown={(event) => {
@@ -134,9 +147,20 @@ export function StoreLayout() {
                   }}
                 />
               )}
+              {searchOpen && search && (
+                <button
+                  type="button"
+                  className="storefront-search-clear"
+                  aria-label="Clear search"
+                  onClick={() => setSearch('')}
+                >
+                  <X aria-hidden="true" />
+                </button>
+              )}
               <button
                 type={searchOpen ? 'submit' : 'button'}
                 aria-label={searchOpen ? 'Search catalog' : 'Open book search'}
+                aria-expanded={searchOpen}
                 onClick={() => {
                   if (!searchOpen) setSearchOpen(true);
                 }}
@@ -179,7 +203,15 @@ export function StoreLayout() {
                 placeholder="Search books"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') setMobileOpen(false);
+                }}
               />
+              {search && (
+                <button type="button" aria-label="Clear search" onClick={() => setSearch('')}>
+                  <X aria-hidden="true" />
+                </button>
+              )}
               <button type="submit" aria-label="Submit search"><ArrowRight aria-hidden="true" /></button>
             </form>
             <nav aria-label="Mobile navigation">
@@ -203,6 +235,11 @@ export function StoreLayout() {
         )}
       </header>
 
+      {sessionError && (
+        <p role="status" className="mx-auto w-full max-w-7xl px-4 py-3 text-sm text-accent">
+          {sessionError}
+        </p>
+      )}
       <main><Outlet /></main>
 
       <footer className="storefront-footer">
@@ -210,7 +247,7 @@ export function StoreLayout() {
           <div className="storefront-footer-brand">
             <Link to="/" className="storefront-brand">
               <span className="storefront-brand-mark"><BookOpen aria-hidden="true" /></span>
-              <span>BookHaven<small>Independent bookstore</small></span>
+              <span>Books Bin<small>Independent bookstore</small></span>
             </Link>
             <p>A good book has a way of finding you. Start looking.</p>
             <Link to="/catalog" className="storefront-footer-cta">Find your next read <ArrowRight aria-hidden="true" /></Link>
@@ -220,7 +257,7 @@ export function StoreLayout() {
             <Link to="/catalog">All books</Link>
             <Link to="/#bestsellers">Bestsellers</Link>
             <Link to="/#new-arrivals">New arrivals</Link>
-            <Link to="/about">About BookHaven</Link>
+            <Link to="/about">About Books Bin</Link>
           </div>
           <div className="storefront-footer-column">
             <h2>Help & support</h2>
@@ -239,7 +276,7 @@ export function StoreLayout() {
           </div>
         </div>
         <div className="storefront-footer-bottom">
-          <span>© {currentYear} BookHaven. All rights reserved.</span>
+          <span>© {currentYear} Books Bin. All rights reserved.</span>
           <span>Made for the love of a good story.</span>
         </div>
       </footer>

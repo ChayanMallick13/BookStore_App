@@ -55,7 +55,7 @@ export function OrdersPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 md:px-6">
-      <p className="text-xs uppercase tracking-[0.25em] text-ink-400">Your BookHaven account</p>
+      <p className="text-xs uppercase tracking-[0.25em] text-ink-400">Your Books Bin account</p>
       <h1 className="mt-1 font-serif text-4xl">Order history</h1>
       {!data?.length ? (
         <div className="mt-8 rounded-xl border border-ink-100 bg-white p-10 text-center">
@@ -127,7 +127,7 @@ export function OrderDetailPage() {
         amount: paymentOrder.amount,
         currency: paymentOrder.currency,
         orderId: paymentOrder.razorpayOrderId,
-        name: 'BookHaven',
+        name: 'Books Bin',
         description: `Order ${query.data?.orderNumber ?? ''}`,
         prefill: { name: user.name, email: user.email },
         onSuccess: (response) => {

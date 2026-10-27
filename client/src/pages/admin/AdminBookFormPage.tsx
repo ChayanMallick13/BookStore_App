@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ImagePlus, Save } from 'lucide-react';
@@ -61,6 +61,10 @@ export function AdminBookFormPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<BookForm>(blankForm);
   const [covers, setCovers] = useState<File[]>([]);
+  const coverPreviews = useMemo(
+    () => covers.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [covers],
+  );
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
 
@@ -96,6 +100,10 @@ export function AdminBookFormPage() {
       isActive: book.isActive,
     });
   }, [bookQuery.data]);
+
+  useEffect(() => () => {
+    coverPreviews.forEach(({ url }) => URL.revokeObjectURL(url));
+  }, [coverPreviews]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -230,6 +238,18 @@ export function AdminBookFormPage() {
                   />
                 </label>
                 <p className="mt-1 text-xs text-ink-400">JPEG, PNG or WebP. Maximum 5 MB per image.</p>
+                {coverPreviews.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-3" aria-label="Selected cover image previews">
+                    {coverPreviews.map(({ file, url }) => (
+                      <img
+                        key={`${file.name}-${file.lastModified}`}
+                        className="h-28 w-20 rounded-md border border-ink-100 object-cover"
+                        src={url}
+                        alt={`Selected cover: ${file.name}`}
+                      />
+                    ))}
+                  </div>
+                )}
               </Field>
             </div>
             <Field label="Description">

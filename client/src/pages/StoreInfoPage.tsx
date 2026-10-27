@@ -5,7 +5,7 @@ const pages: Record<string, { eyebrow: string; title: string; paragraphs: string
     eyebrow: 'Our story',
     title: 'A bookshop for the curious.',
     paragraphs: [
-      'BookHaven is an independent bookstore built around the belief that the right book can open a new world.',
+      'Books Bin is an independent bookstore built around the belief that the right book can open a new world.',
       'Our shelves bring together thoughtful fiction, ideas, and voices from across the world. Every title is selected to reward a slower, more curious read.',
     ],
   },
@@ -45,8 +45,8 @@ const pages: Record<string, { eyebrow: string; title: string; paragraphs: string
     eyebrow: 'Your information',
     title: 'Privacy policy',
     paragraphs: [
-      'BookHaven uses the information you provide to manage your account, deliver orders, and support your requests.',
-      'Passwords are stored as secure hashes. Authentication tokens are held in HTTP-only cookies. Payment card details are handled by the payment provider and are not stored by BookHaven.',
+      'Books Bin uses the information you provide to manage your account, deliver orders, and support your requests.',
+      'Passwords are stored as secure hashes. Authentication tokens are held in HTTP-only cookies. Payment card details are handled by the payment provider and are not stored by Books Bin.',
     ],
   },
   terms: {
@@ -72,8 +72,8 @@ export function StoreInfoPage() {
         {page.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
       </div>
       {key === 'contact' && (
-        <a className="mt-6 inline-block font-medium text-ink-900 underline underline-offset-4" href="mailto:books@bookhaven.example">
-          Email books@bookhaven.example
+        <a className="mt-6 inline-block font-medium text-ink-900 underline underline-offset-4" href="mailto:books@booksbin.example">
+          Email books@booksbin.example
         </a>
       )}
       <Link className="mt-10 block text-sm text-ink-500 hover:text-ink-900" to="/catalog">Explore the catalog →</Link>

@@ -5,6 +5,7 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { setupTestDb, teardownTestDb, getTestApp } from './helpers.js';
 import { User } from '../models/User.js';
+import { logger } from '../utils/logger.js';
 
 describe('Auth & authorization', () => {
   const app = getTestApp();
@@ -141,6 +142,98 @@ describe('Auth & authorization', () => {
 
     expect(response.status).toBe(401);
     expect(response.body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('sets secure session cookies and serves the authenticated profile', async () => {
+    const login = await request(app).post('/api/v1/auth/login').send({
+      email: 'customer@test.com',
+      password: 'password123',
+    });
+    const cookies = login.headers['set-cookie'] as string[];
+    expect(login.status).toBe(200);
+    expect(cookies).toHaveLength(2);
+    expect(cookies.join(';')).toContain('HttpOnly');
+    expect(cookies.join(';')).toContain('SameSite=Lax');
+
+    const profile = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', cookies);
+    expect(profile.status).toBe(200);
+    expect(profile.body.data.email).toBe('customer@test.com');
+  });
+
+  it('uses the refresh cookie once when the access cookie is expired', async () => {
+    const login = await request(app).post('/api/v1/auth/login').send({
+      email: 'customer@test.com',
+      password: 'password123',
+    });
+    const cookies = login.headers['set-cookie'] as string[];
+    const refreshCookie = cookies.find((cookie) => cookie.startsWith('bookhaven_refresh='));
+    expect(refreshCookie).toBeDefined();
+
+    const refreshed = await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', `${refreshCookie?.split(';')[0]}; bookhaven_access=expired`);
+    expect(refreshed.status).toBe(200);
+
+    const profile = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', refreshed.headers['set-cookie']);
+    expect(profile.status).toBe(200);
+  });
+
+  it('clears cookies and invalidates the refresh token on logout', async () => {
+    const login = await request(app).post('/api/v1/auth/login').send({
+      email: 'customer@test.com',
+      password: 'password123',
+    });
+    const cookies = login.headers['set-cookie'] as string[];
+
+    const logout = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', cookies);
+    expect(logout.status).toBe(200);
+    expect(logout.headers['set-cookie']).toHaveLength(2);
+    expect(logout.headers['set-cookie'].join(';')).toMatch(/expires=/i);
+
+    const replay = await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', cookies);
+    expect(replay.status).toBe(401);
+  });
+
+  it('keeps current-user routes protected and returns a request ID', async () => {
+    const response = await request(app).get('/api/v1/auth/me');
+
+    expect(response.status).toBe(401);
+    expect(response.headers['x-request-id']).toMatch(/^[\da-f-]{36}$/i);
+    expect(response.body.error.requestId).toBe(response.headers['x-request-id']);
+  });
+
+  it('passes database failures during authentication to the centralized error handler', async () => {
+    const login = await request(app).post('/api/v1/auth/login').send({
+      email: 'customer@test.com',
+      password: 'password123',
+    });
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    vi.spyOn(User, 'findById').mockRejectedValueOnce(new Error('database lookup failed'));
+
+    const response = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', login.headers['set-cookie']);
+
+    expect(response.status).toBe(500);
+    expect(response.body.error.code).toBe('INTERNAL_ERROR');
+    expect(response.body.error.requestId).toBe(response.headers['x-request-id']);
+    expect(errorLog).toHaveBeenCalledWith(
+      'Unhandled request error',
+      expect.objectContaining({
+        route: '/api/v1/auth/me',
+        error: expect.objectContaining({ message: 'database lookup failed', stack: expect.any(String) }),
+      }),
+    );
+    errorLog.mockRestore();
+    vi.restoreAllMocks();
   });
 
   it('allows admin to access admin dashboard', async () => {

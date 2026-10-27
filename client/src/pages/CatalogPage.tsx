@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
+import { Search, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { Book } from '@/types';
 import { BookCard } from '@/components/BookCard';
@@ -44,18 +45,59 @@ export function CatalogPage() {
           <p>Search, sort, and find the books that stay with you.</p>
         </div>
         <div className="storefront-catalog-controls">
-          <Input
-            aria-label="Search books"
-            placeholder="Search books…"
-            value={q}
-            onChange={(e) => {
+          <form
+            className="storefront-catalog-search"
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
               const next = new URLSearchParams(params);
-              next.set('q', e.target.value);
+              const query = q.trim();
+              if (query) next.set('q', query);
+              else next.delete('q');
               next.set('page', '1');
               setParams(next);
             }}
-            className="w-full md:w-72"
-          />
+          >
+            <Search aria-hidden="true" />
+            <Input
+              aria-label="Search books"
+              placeholder="Search titles, authors, or subjects"
+              value={q}
+              onChange={(e) => {
+                const next = new URLSearchParams(params);
+                if (e.target.value) next.set('q', e.target.value);
+                else next.delete('q');
+                next.set('page', '1');
+                setParams(next);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  const next = new URLSearchParams(params);
+                  next.delete('q');
+                  next.set('page', '1');
+                  setParams(next);
+                }
+              }}
+              className="storefront-catalog-search-input"
+            />
+            {q && (
+              <button
+                type="button"
+                aria-label="Clear book search"
+                onClick={() => {
+                  const next = new URLSearchParams(params);
+                  next.delete('q');
+                  next.set('page', '1');
+                  setParams(next);
+                }}
+              >
+                <X aria-hidden="true" />
+              </button>
+            )}
+            <button type="submit" className="storefront-catalog-search-submit">
+              Search
+            </button>
+          </form>
           <select
             aria-label="Sort books"
             className="h-10 rounded-md border border-ink-200 bg-white px-3 text-sm"

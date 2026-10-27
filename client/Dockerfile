@@ -9,7 +9,8 @@ WORKDIR /workspace/client
 RUN npm run build
 
 FROM nginx:alpine
-COPY client/nginx.conf /etc/nginx/conf.d/default.conf
+ENV API_PROXY_URL=http://server:5000
+COPY client/nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /workspace/client/dist /usr/share/nginx/html
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD wget -qO- http://127.0.0.1/ || exit 1

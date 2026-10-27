@@ -36,7 +36,7 @@ export function BookCover({
           aria-label={decorative ? undefined : `${book.title}${author ? ` by ${author}` : ''}`}
           aria-hidden={decorative || undefined}
         >
-          <span className="book-cover-kicker">BookHaven · Catalog</span>
+          <span className="book-cover-kicker">Books Bin · Catalog</span>
           <strong>{book.title}</strong>
           {author && <span className="book-cover-author">{author}</span>}
           <span className="book-cover-seal" aria-hidden="true" />

@@ -11,10 +11,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "tsx src/scripts/seed.ts",
-    "bootstrap:admin": "tsx src/scripts/bootstrapAdmin.ts"
+    "bootstrap:admin": "tsx src/scripts/bootstrapAdmin.ts",
+    "migrate:cloudinary": "tsx src/scripts/migrateBookImages.ts",
+    "cloudinary:cleanup": "tsx src/scripts/retryCloudinaryCleanup.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.11.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

@@ -53,11 +53,15 @@ export const login: RequestHandler = async (req, res, next) => {
 export const refresh: RequestHandler = async (req, res, next) => {
   try {
     const token = req.cookies?.[REFRESH_COOKIE];
-    if (!token) return next(new UnauthorizedError('No refresh token'));
+    if (!token) {
+      clearAuthCookies(res);
+      return next(new UnauthorizedError('No refresh token'));
+    }
     const tokens = await authService.refreshSession(token);
     setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
     sendSuccess(res, { user: tokens.user });
   } catch (e) {
+    if (e instanceof UnauthorizedError) clearAuthCookies(res);
     next(e);
   }
 };

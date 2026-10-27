@@ -2,7 +2,7 @@
   "name": "bookhaven",
   "private": true,
   "version": "1.0.0",
-  "description": "BookHaven — Full-Stack MERN Bookstore",
+  "description": "Books Bin — Full-Stack MERN Bookstore",
   "workspaces": [
     "client",
     "server"

@@ -13,6 +13,11 @@ export function sendError(
 ) {
   return res.status(status).json({
     success: false,
-    error: { message, code, details },
+    error: {
+      message,
+      code,
+      details,
+      ...(typeof res.locals.requestId === 'string' ? { requestId: res.locals.requestId } : {}),
+    },
   });
 }

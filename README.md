@@ -1,12 +1,12 @@
-# BookHaven — Project and Agent Handoff Guide
+# Books Bin — Project and Agent Handoff Guide
 
-This document is the orientation guide for developers and coding agents working on BookHaven. It describes the current implementation, how to run it, where behavior lives, how the main data flows work, and the constraints that should be preserved when making changes.
+This document is the orientation guide for developers and coding agents working on Books Bin. It describes the current implementation, how to run it, where behavior lives, how the main data flows work, and the constraints that should be preserved when making changes.
 
 It is based on the repository as it exists today. Source code is authoritative if this guide and implementation ever disagree. Update this document when routes, environment variables, business rules, or deployment behavior change.
 
 ## 1. Project summary
 
-BookHaven is a full-stack online bookstore built as a TypeScript monorepo. Customers can browse a catalog, create accounts, manage a cart and wishlist, save delivery addresses, place orders, and pay using Cash on Delivery or Razorpay when configured. Administrators can manage the catalog, orders, users, coupons, review moderation, inventory records, and sales reports.
+Books Bin is a full-stack online bookstore built as a TypeScript monorepo. Customers can browse a catalog, create accounts, manage a cart and wishlist, save delivery addresses, place orders, and pay using Cash on Delivery or Razorpay when configured. Administrators can manage the catalog, orders, users, coupons, review moderation, inventory records, and sales reports.
 
 The system consists of:
 
@@ -15,10 +15,10 @@ The system consists of:
 - **Database:** MongoDB configured as a replica set. Multi-document transactions are used for order and inventory workflows.
 - **Images:** Uploaded book covers are written to the API's local `server/uploads/books` directory and served by the API under `/uploads`. There is no Cloudinary integration in the current implementation.
 - **Payments:** Razorpay is optional and configured only on the server, apart from the publishable checkout key needed by the client. COD is enabled by default unless explicitly disabled.
-- **Email:** Nodemailer with optional SMTP configuration.
+- **Email:** Configurable Nodemailer SMTP for local development and Resend HTTPS API for production.
 - **Containerization:** Separate client and server Dockerfiles plus a Compose setup intended for local development.
 
-The UI uses the BookHaven brand and a warm, editorial bookstore design. The storefront is responsive and includes CSS-rendered decorative cover motifs rather than emoji star glyphs.
+The UI uses the Books Bin brand and a warm, editorial bookstore design. The storefront is responsive and includes CSS-rendered decorative cover motifs rather than emoji star glyphs.
 
 ## 2. Technology and workspace layout
 
@@ -98,7 +98,8 @@ Browser
 - In the Docker Compose setup, Nginx serves the built client and proxies API and upload paths to the Compose service named `server` on port `5000`.
 - The default client API base is the same-origin path `/api/v1`. Setting `VITE_API_URL` changes that base at **client build time**.
 - The API uses `CLIENT_URL` as its credentialed CORS origin. The client sends cookies using `credentials: 'include'`.
-- The API uses HTTP-only cookies named `bookhaven_access` and `bookhaven_refresh`; JavaScript in the browser should not read or store these tokens directly.
+- Production cookie `SameSite` defaults to `none` for cross-origin hosting; local development defaults to `lax`. The frontend Nginx Docker service can proxy the API under the frontend origin to avoid third-party-cookie restrictions entirely.
+- The API uses HTTP-only cookies named `bookhaven_access` and `bookhaven_refresh` (legacy internal names); JavaScript in the browser should not read or store these tokens directly.
 - Business rules, prices, inventory checks, coupon validation, and payment verification belong on the server. The client is not an authority for any of these values.
 
 ## 4. Client application
@@ -157,6 +158,9 @@ TanStack Query is configured in `App.tsx` with a 30-second query `staleTime` and
 - Routes are mounted under `/api/v1`; route files define paths relative to their mount point.
 - Zod middleware validates request bodies and query values. Keep invalid input errors explicit.
 - API responses generally use `{ "success": true, "data": ..., "meta": ... }`; errors use the shared error response helper.
+- Responses include a generated `X-Request-ID` header; error envelopes also include that identifier for correlating client reports with Render logs.
+- API requests are logged as structured JSON with method, path (without query), status, duration, and request ID. Unexpected failures log redacted diagnostics; request bodies, cookies, authorization headers, passwords, and tokens are not logged.
+- Mutating browser requests carrying an `Origin` header are checked against the configured client origin to help protect cookie-authenticated actions from cross-site requests.
 - Business logic belongs in services where practical. Controllers/routes should handle HTTP concerns and delegate to services.
 - The API health check is `GET /api/v1/health`; Swagger UI is served at `/api/docs`.
 
@@ -198,6 +202,8 @@ Consult the route files and Swagger UI for exact request/response schemas. Route
 - `server/src/config/swagger.ts`: API documentation setup.
 - `server/src/utils/`: common response, errors, pagination, JWT, cookie, logging, and route-parameter helpers.
 
+Unexpected errors are logged with a normalized error name, message, stack, route, method, and request ID. Production responses do not include internal error details. `GET /api/v1/health` reports HTTP 503 when Mongoose is disconnected. Malformed JSON and unknown routes use the standard API error envelope.
+
 ## 6. Data model
 
 The current Mongoose models live under `server/src/models`.
@@ -230,7 +236,7 @@ Relationships use MongoDB ObjectIds and Mongoose references. Orders deliberately
 3. Login establishes access and refresh cookies. `/auth/me` returns the current user; refresh is used to obtain a new access session.
 4. Password recovery uses the forgot/reset endpoints.
 5. The authentication router has a rate limiter. Password hashes and sensitive verification/reset fields are not returned as normal user fields.
-6. In development, absent SMTP configuration causes email to be logged as skipped; configure SMTP for production email delivery.
+6. Email delivery uses the selected provider. SMTP is intended for local development; production on Render Free should use the HTTPS Resend provider. In test mode only, unconfigured email is explicitly skipped.
 
 ### Catalog and images
 
@@ -286,11 +292,13 @@ Templates: `server/.env.example` and `client/.env.example`. Treat those as examp
 | `JWT_ACCESS_EXPIRES` | `15m` | Access-token lifetime |
 | `JWT_REFRESH_EXPIRES` | `7d` | Refresh-token lifetime |
 | `COOKIE_SECURE` | False unless `true`; production mode forces secure cookies | Optional secure-cookie override |
-| `COOKIE_SAME_SITE` | `lax` | `strict`, `lax`, or `none`; `none` requires secure cookies in modern browsers |
-| `SMTP_HOST` | Optional | SMTP host; absence skips email delivery |
+| `COOKIE_SAME_SITE` | `lax` locally, `none` in production | `strict`, `lax`, or `none`; `none` requires HTTPS-secure cookies |
+| `EMAIL_PROVIDER` | `smtp` | `smtp` for local Nodemailer delivery or `resend` for HTTPS delivery |
+| `SMTP_HOST` | Required when selecting SMTP for production; usually set locally | SMTP host, e.g. `smtp.gmail.com` |
 | `SMTP_PORT` | `587` | SMTP port |
-| `SMTP_USER` / `SMTP_PASS` | Optional | SMTP authentication |
-| `EMAIL_FROM` | `BookHaven <noreply@bookhaven.local>` | Sender identity; replace with a verified production sender |
+| `SMTP_USER` / `SMTP_PASS` | Optional pair | SMTP authentication; never commit the password |
+| `RESEND_API_KEY` | Required when `EMAIL_PROVIDER=resend` | Server-only API key; never put it in a `VITE_` variable |
+| `EMAIL_FROM` | `Books Bin <noreply@booksbin.local>` outside production; required in production | Sender identity accepted by the selected provider; configure a verified sender/domain |
 | `RAZORPAY_KEY_ID` | Optional | Razorpay public key ID |
 | `RAZORPAY_KEY_SECRET` | Optional | Razorpay server secret |
 | `RAZORPAY_WEBHOOK_SECRET` | Optional | Secret configured for payment webhooks |
@@ -307,8 +315,13 @@ The admin bootstrap script also reads `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTR
 | --- | --- |
 | `VITE_API_URL` | Optional API base URL, e.g. `https://store.example/api/v1`. Defaults to `/api/v1` (same origin). Injected into the client at build time. |
 | `VITE_RAZORPAY_KEY_ID` | Optional Razorpay public key ID used by checkout. Never put the Razorpay secret here. |
+| `API_PROXY_URL` | Client Docker service runtime only; backend origin used by Nginx to proxy `/api/` and `/uploads/`. Use `http://server:5000` in Compose or the backend HTTPS origin on Render. |
 
-When serving frontend and API on separate origins, configure matching CORS and cookie settings. For cross-site cookies, use HTTPS and configure the appropriate `SameSite=None; Secure` behavior. A same-origin reverse proxy is simpler and recommended.
+The API starts in production with a configuration error if the selected email provider lacks its required provider credential/host. SMTP provider failures and Resend HTTP/API failures are logged without message bodies, recipients, or credentials and are returned as delivery errors to required flows. An order may still be committed if its optional confirmation email fails; the failure is recorded in server logs.
+
+Resend requires an API key and a sender that meets its account's verification rules. For production, verify a domain and configure its required DNS records, then use an address on that verified domain in `EMAIL_FROM`. Provider testing senders may restrict recipient addresses to verified/account-owned recipients. A successful API response means the provider accepted the send request; it does not prove inbox delivery.
+
+When frontend and API are on separate origins, browser privacy settings can block cross-site cookies even when CORS is correct and cookies use `SameSite=None; Secure`. Prefer the same-origin Nginx proxy deployment described below. If keeping separate origins, set the exact frontend origin in `CLIENT_URL`, keep credentials enabled, and use HTTPS.
 
 ## 9. Local development
 
@@ -415,13 +428,13 @@ For a small first deployment, use a VPS or managed container platform for the AP
 Example topology:
 
 ```text
-https://bookhaven.example
+https://booksbin.example
   ├── /                 → client static files
   ├── /api/*            → API container
   └── /uploads/*        → persistent upload storage/API
 
 API container → MongoDB Atlas replica set
-              → SMTP provider
+              → HTTPS email provider
               → Razorpay API (optional)
 ```
 
@@ -431,7 +444,7 @@ API container → MongoDB Atlas replica set
 - Set production secrets via the hosting provider's secret manager, not in Docker images, source control, or README.
 - Use separate, cryptographically random JWT access and refresh secrets of at least 32 characters.
 - Set `NODE_ENV=production`, the real `CLIENT_URL`, and HTTPS-secure cookies.
-- Configure SMTP and a verified sender for verification and account emails.
+- Configure `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and a verified `EMAIL_FROM` sender for production email. Keep Gmail SMTP for local development; Render Free blocks outbound SMTP ports.
 - Configure Razorpay live credentials and webhook URL/secret only when enabling online payments; test first in Razorpay test mode.
 - Decide how uploads persist before allowing image upload. Mount durable storage at the server's uploads directory or migrate the upload adapter to object storage.
 - Keep database backups and test restoring them.
@@ -442,7 +455,23 @@ API container → MongoDB Atlas replica set
 
 `docker-compose.yml` is a development-oriented stack: it uses placeholder JWT values, a local database container, development mode, and published local ports. Adapt it and provide production secrets/storage/network configuration before using containers in a public environment.
 
-The client Docker image builds static assets and serves them using Nginx. Its `nginx.conf` forwards `/api/` and `/uploads/` to the Compose hostname `server:5000`; preserve or intentionally replace that routing when changing deployment topology.
+The client Docker image builds static assets and serves them using Nginx. Its `nginx.conf` forwards `/api/` and `/uploads/` to the value of `API_PROXY_URL`. Compose sets this to `http://server:5000`; on Render, deploying the client as a Docker Web Service and setting `API_PROXY_URL` to the backend HTTPS origin keeps browser API requests and HTTP-only cookies on the frontend's origin.
+
+### Render deployment for reliable authentication and email
+
+The current separate Render subdomains may be treated as cross-site by browser privacy protections. Production cookies use `SameSite=None; Secure`, but some browsers/users block third-party cookies regardless. For a robust same-origin setup:
+
+1. Deploy the client using its `client/Dockerfile` as a **Docker Web Service**, rather than a static-site deployment. This gives the built-in Nginx proxy a runtime environment.
+2. Set the client service variable `API_PROXY_URL` to the backend origin, with no trailing slash, e.g. `https://bookstore-app-9i5w.onrender.com`.
+3. Leave `VITE_API_URL` unset on the client so the browser uses the same-origin `/api/v1` path and Nginx proxies it.
+4. On the backend set `CLIENT_URL` to the exact public client origin, e.g. `https://bookstore-app-frontend-ec1p.onrender.com`. Keep the existing backend URL and frontend URL in their respective Render service settings; do not put credentials in the client.
+5. On the backend set `NODE_ENV=production`, `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and a real, provider-verified `EMAIL_FROM`. Keep MongoDB, JWT, SMTP (if used), and Razorpay values in backend-only Render environment variables.
+6. Deploy the backend first if changing its environment, then deploy/redeploy the Docker client. Verify login, `GET /api/v1/auth/me`, refresh, and logout from the browser Network panel; requests should use the frontend origin and include cookies.
+7. Configure the Razorpay webhook to the backend URL directly; it is a server-to-server callback and should not be routed through the browser's frontend origin.
+
+The Nginx proxy forwards only `/api/` and `/uploads/` to the backend; the frontend's static files and client-side routes remain served by Nginx. The API still checks the exact `Origin` against `CLIENT_URL` for browser mutations. Existing static Render frontends cannot use this Docker Nginx configuration without changing the frontend service type or adding another same-origin proxy/custom-domain setup.
+
+If staying with separate static frontend/API origins, use `CLIENT_URL` equal to the exact frontend origin and keep cookies `SameSite=None; Secure`, but understand that browser third-party-cookie blocking can still prevent sessions. A custom domain and same-origin reverse proxy is preferable.
 
 `client/vite.config.ts` contains development-server configuration, including `allowedHosts: true` to support temporary development tunnels. Do not use the Vite development server as the production web server. Serve the production client build through Nginx or an equivalent static host.
 
@@ -469,7 +498,7 @@ When making changes in this repository:
 - There is no Cloudinary/CDN provider configured. Covers currently use local disk storage and need durable storage in production.
 - A tunnel hostname is for temporary development access, not permanent hosting.
 - `allowedHosts: true` is Vite development configuration, not a production host allowlist or security policy.
-- Email delivery requires SMTP. Without SMTP, the email service logs that the message was skipped.
+- Email delivery requires the selected provider to be configured. Email is explicitly skipped only in test mode; local development can use SMTP and Render production should use Resend HTTPS.
 - Razorpay online payment requires correctly configured server-side credentials and a webhook configuration. Missing credentials do not indicate a successful payment.
 - MongoDB transaction flows require a replica set.
 - Review schema and admin moderation are present; do not claim a customer review-submission UI/API unless implemented separately.

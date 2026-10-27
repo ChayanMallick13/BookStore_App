@@ -8,6 +8,7 @@ import { restoreStockAtomic } from './bookService.js';
 import mongoose from 'mongoose';
 import { WebhookEvent } from '../models/WebhookEvent.js';
 import { logger } from '../utils/logger.js';
+import { errorDetails } from '../utils/errorDetails.js';
 
 function getRazorpay() {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
@@ -55,6 +56,14 @@ export async function createRazorpayOrder(userId: string, orderId: string) {
     currency: 'INR',
     receipt: order.orderNumber,
     notes: { orderId: String(order._id) },
+  }).catch((error: unknown) => {
+    logger.error('Razorpay order creation failed', {
+      operation: 'payment.razorpay_order.create',
+      provider: 'razorpay',
+      orderId: String(order._id),
+      error: errorDetails(error),
+    });
+    throw new AppError('Unable to initiate payment with Razorpay', 502, 'PAYMENT_PROVIDER_UNAVAILABLE');
   });
 
   order.razorpayOrderId = rzpOrder.id;
@@ -66,6 +75,12 @@ export async function createRazorpayOrder(userId: string, orderId: string) {
     provider: 'razorpay',
     amount: order.total,
     status: 'created',
+    razorpayOrderId: rzpOrder.id,
+  });
+  logger.info('Razorpay order created', {
+    operation: 'payment.razorpay_order.create',
+    provider: 'razorpay',
+    orderId: String(order._id),
     razorpayOrderId: rzpOrder.id,
   });
 
@@ -237,7 +252,15 @@ export async function processWebhookEvent(eventId: string, payload: Record<strin
     record.status = 'processed';
     record.processedAt = new Date();
     await record.save();
-    return { handled: event === 'payment.captured' || event === 'payment.failed' };
+    const handled = event === 'payment.captured' || event === 'payment.failed';
+    logger.info('Razorpay webhook processed', {
+      operation: 'payment.webhook.process',
+      provider: 'razorpay',
+      eventId,
+      event,
+      handled,
+    });
+    return { handled };
   } catch (error) {
     record.status = 'failed';
     await record.save();

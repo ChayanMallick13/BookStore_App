@@ -165,7 +165,7 @@ export function CheckoutPage() {
         key: paymentOrder.keyId,
         amount: paymentOrder.amount,
         currency: paymentOrder.currency,
-        name: 'BookHaven',
+        name: 'Books Bin',
         description: `Order ${order.orderNumber}`,
         orderId: paymentOrder.razorpayOrderId,
         prefill: { name: user.name, email: user.email },

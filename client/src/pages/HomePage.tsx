@@ -368,7 +368,7 @@ function BookShelf({
             <div className="storefront-product-details">
               <div>
                 <p className="storefront-product-author">
-                  {typeof book.author === 'object' ? book.author.name : 'A BookHaven find'}
+                  {typeof book.author === 'object' ? book.author.name : 'A Books Bin find'}
                 </p>
                 <Link className="storefront-product-title" to={`/books/${book.slug}`}>{book.title}</Link>
                 <div className="storefront-product-price">

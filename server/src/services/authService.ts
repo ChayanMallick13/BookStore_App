@@ -2,12 +2,11 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { User } from '../models/User.js';
 import { AppError, ConflictError, UnauthorizedError, NotFoundError } from '../utils/errors.js';
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
+import { signAccessToken, signRefreshToken, verifyRefreshToken, type RefreshTokenPayload } from '../utils/jwt.js';
 import { sendEmail } from './emailService.js';
 import { Cart } from '../models/Cart.js';
 import { Wishlist } from '../models/Wishlist.js';
 import { env } from '../config/env.js';
-import { logger } from '../utils/logger.js';
 
 const SALT_ROUNDS = 12;
 const EMAIL_OTP_TTL_MS = 10 * 60 * 1000;
@@ -26,19 +25,12 @@ function hashEmailOtp(email: string, otp: string) {
 }
 
 async function emailVerificationOtp(email: string, otp: string) {
-  if (!env.SMTP_HOST && env.NODE_ENV !== 'production') {
-    if (env.NODE_ENV === 'development') {
-      logger.warn('Email OTP for local development only', { email, otp, expiresInMinutes: 10 });
-    }
-    return;
-  }
-  if (!env.SMTP_HOST) {
-    throw new AppError('Email delivery is not configured', 503, 'EMAIL_NOT_CONFIGURED');
-  }
   await sendEmail(
-    email,
-    'Your BookHaven verification code',
-    `<p>Your BookHaven verification code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:8px">${otp}</p><p>This code expires in 10 minutes. If you did not request it, you can ignore this email.</p>`,
+    {
+      to: email,
+      subject: 'Your Books Bin verification code',
+      html: `<p>Your Books Bin verification code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:8px">${otp}</p><p>This code expires in 10 minutes. If you did not request it, you can ignore this email.</p>`,
+    },
   );
 }
 
@@ -159,7 +151,12 @@ export async function loginUser(email: string, password: string) {
 }
 
 export async function refreshSession(refreshToken: string) {
-  const payload = verifyRefreshToken(refreshToken);
+  let payload: RefreshTokenPayload;
+  try {
+    payload = verifyRefreshToken(refreshToken);
+  } catch {
+    throw new UnauthorizedError('Invalid refresh token');
+  }
   const user = await User.findOneAndUpdate(
     { _id: payload.sub, isActive: true, refreshTokenVersion: payload.version },
     { $inc: { refreshTokenVersion: 1 } },
@@ -189,9 +186,11 @@ export async function requestPasswordReset(email: string) {
   user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000);
   await user.save();
   await sendEmail(
-    user.email,
-    'Reset your BookHaven password',
-    `<p>Reset your password using this link. It expires in one hour.</p><p><a href="${env.CLIENT_URL.replace(/\/+$/, '')}/reset-password?token=${encodeURIComponent(token)}">Reset password</a></p>`,
+    {
+      to: user.email,
+      subject: 'Reset your Books Bin password',
+      html: `<p>Reset your password using this link. It expires in one hour.</p><p><a href="${env.CLIENT_URL}/reset-password?token=${encodeURIComponent(token)}">Reset password</a></p>`,
+    },
   );
 }
 

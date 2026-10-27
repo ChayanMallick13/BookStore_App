@@ -19,7 +19,7 @@ export function AdminLayout() {
     <div className="min-h-screen bg-ink-50 md:grid md:grid-cols-[240px_1fr]">
       <aside className="border-r border-ink-100 bg-white p-4">
         <Link to="/" className="font-serif text-xl">
-          BookHaven Admin
+          Books Bin Admin
         </Link>
         <nav className="mt-8 space-y-1">
           <NavLink to="/admin" end className={linkClass}>

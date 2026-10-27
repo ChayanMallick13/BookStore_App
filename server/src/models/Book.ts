@@ -1,4 +1,5 @@
 import mongoose, { Schema, type Document, type Types } from 'mongoose';
+import { cloudinaryAssetSchema, type CloudinaryAsset } from './CloudinaryAsset.js';
 
 export interface IBook extends Document {
   title: string;
@@ -13,6 +14,7 @@ export interface IBook extends Document {
   discountPercent: number;
   stock: number;
   coverImages: string[];
+  coverAssets: CloudinaryAsset[];
   featured: boolean;
   isActive: boolean;
   isArchived: boolean;
@@ -34,6 +36,7 @@ const bookSchema = new Schema<IBook>(
     discountPercent: { type: Number, default: 0, min: 0, max: 100 },
     stock: { type: Number, required: true, min: 0, index: true },
     coverImages: { type: [String], default: [] },
+    coverAssets: { type: [cloudinaryAssetSchema], default: [] },
     featured: { type: Boolean, default: false, index: true },
     isActive: { type: Boolean, default: true, index: true },
     isArchived: { type: Boolean, default: false, index: true },

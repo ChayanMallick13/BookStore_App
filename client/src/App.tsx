@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Eye, EyeOff } from 'lucide-react';
 import { StoreLayout } from '@/components/layout/StoreLayout';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
@@ -36,6 +37,7 @@ function AccountPage({ register = false }: { register?: boolean }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const [verificationPending, setVerificationPending] = useState(false);
@@ -51,6 +53,7 @@ function AccountPage({ register = false }: { register?: boolean }) {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending) return;
     setError('');
     setPending(true);
     try {
@@ -59,13 +62,19 @@ function AccountPage({ register = false }: { register?: boolean }) {
         email,
         password,
       });
-      if (register && data.requiresEmailVerification) {
+      if (register) {
+        if (!data.requiresEmailVerification) {
+          throw new Error('Registration completed without a verification requirement. Please contact support.');
+        }
         setVerificationPending(true);
         showToast('Check your email', { description: `Enter the six-digit code sent to ${email.trim()}.`, kind: 'info' });
         return;
       }
-      await refresh();
-      navigate('/');
+      const authenticatedUser = await refresh();
+      if (!authenticatedUser) {
+        throw new Error('Sign-in was accepted, but your browser session could not be confirmed. Please try again.');
+      }
+      navigate(authenticatedUser.role === 'admin' ? '/admin' : '/');
       showToast(register ? 'Account created' : 'Welcome back', { description: 'You are now signed in.' });
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'Unable to sign in. Please try again.';
@@ -83,13 +92,17 @@ function AccountPage({ register = false }: { register?: boolean }) {
 
   async function verifyEmail(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending) return;
     setError('');
     setPending(true);
     try {
       await api.post('/auth/verify-email', { email: email.trim(), otp });
-      await refresh();
-      showToast('Email verified', { description: 'Your BookHaven account is ready.' });
-      navigate('/');
+      const authenticatedUser = await refresh();
+      if (!authenticatedUser) {
+        throw new Error('Your email was verified, but your browser session could not be confirmed. Please sign in.');
+      }
+      showToast('Email verified', { description: 'Your Books Bin account is ready.' });
+      navigate(authenticatedUser.role === 'admin' ? '/admin' : '/');
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'Unable to verify your email.';
       setError(message);
@@ -100,6 +113,7 @@ function AccountPage({ register = false }: { register?: boolean }) {
   }
 
   async function resendOtp() {
+    if (resending) return;
     setError('');
     setResending(true);
     try {
@@ -113,9 +127,9 @@ function AccountPage({ register = false }: { register?: boolean }) {
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-16">
-      <div className="rounded-2xl border border-ink-100 bg-white p-8 shadow-card">
-        <p className="text-xs uppercase tracking-[0.3em] text-ink-400">BookHaven account</p>
+    <div className="mx-auto w-full max-w-md px-4 py-10 sm:py-16">
+      <div className="rounded-2xl border border-ink-100 bg-white p-6 shadow-card sm:p-8">
+        <p className="text-xs uppercase tracking-[0.3em] text-ink-400">Books Bin account</p>
         <h1 className="mt-2 font-serif text-3xl">{verificationPending ? 'Verify your email' : register ? 'Create an account' : 'Welcome back'}</h1>
         <p className="mt-2 text-sm text-ink-500">
           {verificationPending
@@ -161,24 +175,37 @@ function AccountPage({ register = false }: { register?: boolean }) {
               {register && (
                 <label className="block space-y-1.5 text-sm font-medium">
                   Name
-                  <Input autoComplete="name" required value={name} onChange={(event) => setName(event.target.value)} />
+                  <Input autoComplete="name" minLength={2} maxLength={100} required value={name} onChange={(event) => setName(event.target.value)} />
                 </label>
               )}
               <label className="block space-y-1.5 text-sm font-medium">
                 Email
-                <Input autoComplete="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+                <Input autoComplete="email" type="email" maxLength={255} required value={email} onChange={(event) => setEmail(event.target.value)} />
               </label>
-              <label className="block space-y-1.5 text-sm font-medium">
-                Password
-                <Input
-                  autoComplete={register ? 'new-password' : 'current-password'}
-                  type="password"
-                  minLength={8}
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </label>
+              <div className="space-y-1.5 text-sm font-medium">
+                <label htmlFor="account-password">Password</label>
+                <span className="account-password-field">
+                  <Input
+                    id="account-password"
+                    autoComplete={register ? 'new-password' : 'current-password'}
+                    type={passwordVisible ? 'text' : 'password'}
+                    minLength={register ? 8 : undefined}
+                    maxLength={128}
+                    required
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="account-password-toggle"
+                    aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                    aria-pressed={passwordVisible}
+                    onClick={() => setPasswordVisible((visible) => !visible)}
+                  >
+                    {passwordVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                  </button>
+                </span>
+              </div>
               {error && <p role="alert" className="text-sm text-accent">{error}</p>}
               {!register && <Link className="block text-right text-sm underline" to="/forgot-password">Forgot password?</Link>}
               <Button className="w-full" variant="accent" disabled={pending}>
@@ -186,7 +213,7 @@ function AccountPage({ register = false }: { register?: boolean }) {
               </Button>
             </form>
             <p className="mt-6 text-center text-sm text-ink-500">
-              {register ? 'Already have an account?' : 'New to BookHaven?'}{' '}
+              {register ? 'Already have an account?' : 'New to Books Bin?'}{' '}
               <Link className="font-medium text-ink-900 underline underline-offset-4" to={register ? '/login' : '/register'}>
                 {register ? 'Sign in' : 'Create an account'}
               </Link>
@@ -230,8 +257,8 @@ function AppRoutes() {
         <Route path="returns" element={<StoreInfoPage />} />
         <Route path="privacy" element={<StoreInfoPage />} />
         <Route path="terms" element={<StoreInfoPage />} />
-        <Route path="login" element={<AccountPage />} />
-        <Route path="register" element={<AccountPage register />} />
+        <Route path="login" element={<AccountPage key="login" />} />
+        <Route path="register" element={<AccountPage key="register" register />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="reset-password" element={<ResetPasswordPage />} />
         <Route path="*" element={<MissingPage />} />

@@ -5,6 +5,8 @@ import { Category } from '../models/Category.js';
 import { Author } from '../models/Author.js';
 import { Book } from '../models/Book.js';
 import { Coupon } from '../models/Coupon.js';
+import { logger } from '../utils/logger.js';
+import { errorDetails } from '../utils/errorDetails.js';
 
 dotenv.config();
 
@@ -70,10 +72,10 @@ async function run() {
         title: sample.title,
         slug,
         isbn: sample.isbn,
-        description: `${sample.title} — a curated title for BookHaven readers. Explore themes of wonder, growth, and imagination in this beautifully crafted edition.`,
+        description: `${sample.title} — a curated title for Books Bin readers. Explore themes of wonder, growth, and imagination in this beautifully crafted edition.`,
         category: category!._id,
         author: author!._id,
-        publisher: 'BookHaven Press',
+        publisher: 'Books Bin Press',
         price: sample.price,
         discountPercent: sample.discountPercent,
         stock: sample.stock,
@@ -105,6 +107,6 @@ async function run() {
 }
 
 run().catch((err) => {
-  console.error(err);
+  logger.error('Seed script failed', { operation: 'seed', error: errorDetails(err) });
   process.exit(1);
 });

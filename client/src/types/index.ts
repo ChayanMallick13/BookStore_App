@@ -21,9 +21,19 @@ export interface Book {
   stock: number;
   inStock: boolean;
   coverImages: string[];
+  coverAssets?: CloudinaryAsset[];
   featured: boolean;
   isActive: boolean;
   isArchived?: boolean;
+}
+
+export interface CloudinaryAsset {
+  publicId: string;
+  secureUrl: string;
+  resourceType: 'image' | 'video' | 'raw';
+  format?: string;
+  width?: number;
+  height?: number;
 }
 
 export interface CartItem {

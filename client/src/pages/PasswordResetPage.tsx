@@ -98,7 +98,7 @@ function ResetCard({ title, description, children }: { title: string; descriptio
   return (
     <div className="mx-auto max-w-md px-4 py-16">
       <div className="rounded-2xl border border-ink-100 bg-white p-8 shadow-card">
-        <p className="text-xs uppercase tracking-[0.3em] text-ink-400">BookHaven account</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-ink-400">Books Bin account</p>
         <h1 className="mt-2 font-serif text-3xl">{title}</h1>
         <p className="mt-2 text-sm text-ink-500">{description}</p>
         {children}

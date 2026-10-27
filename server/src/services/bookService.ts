@@ -7,6 +7,8 @@ import { InventoryTransaction } from '../models/InventoryTransaction.js';
 import { Order } from '../models/Order.js';
 import type { z } from 'zod';
 import type { bookCreateSchema, bookQuerySchema } from '../validators/bookValidators.js';
+import type { CloudinaryAsset } from '../models/CloudinaryAsset.js';
+import { deleteUnreferencedCloudinaryAssets } from './cloudinaryCleanupService.js';
 
 type BookCreate = z.infer<typeof bookCreateSchema>;
 type BookQuery = z.infer<typeof bookQuerySchema>;
@@ -29,6 +31,7 @@ export function serializeBook(book: IBook & { category?: unknown; author?: unkno
     stock: book.stock,
     inStock: book.stock > 0,
     coverImages: book.coverImages,
+    coverAssets: book.coverAssets ?? [],
     featured: book.featured,
     isActive: book.isActive,
     isArchived: book.isArchived,
@@ -114,13 +117,14 @@ export async function getBookById(id: string, admin = false) {
   return serializeBook(book);
 }
 
-export async function createBook(input: BookCreate, coverImages: string[], actorId?: string) {
+export async function createBook(input: BookCreate, coverAssets: CloudinaryAsset[], actorId?: string) {
   const slug = await uniqueSlug(input.title);
   try {
     const book = await Book.create({
       ...input,
       slug,
-      coverImages,
+      coverImages: coverAssets.map((asset) => asset.secureUrl),
+      coverAssets,
     });
     if (actorId) {
       await InventoryTransaction.create({
@@ -142,16 +146,21 @@ export async function createBook(input: BookCreate, coverImages: string[], actor
 export async function updateBook(
   id: string,
   input: Partial<BookCreate>,
-  coverImages?: string[],
+  coverAssets?: CloudinaryAsset[],
   actorId?: string,
 ) {
   const book = await Book.findById(id);
   if (!book) throw new NotFoundError('Book not found');
+  const previousAssets = book.coverAssets ?? [];
   const prevStock = book.stock;
   if (input.title) book.slug = await uniqueSlug(input.title, id);
   Object.assign(book, input);
-  if (coverImages?.length) book.coverImages = coverImages;
+  if (coverAssets?.length) {
+    book.coverAssets = coverAssets;
+    book.coverImages = coverAssets.map((asset) => asset.secureUrl);
+  }
   await book.save();
+  if (coverAssets?.length) await deleteUnreferencedCloudinaryAssets(previousAssets);
   if (input.stock !== undefined && input.stock !== prevStock && actorId) {
     await InventoryTransaction.create({
       book: book._id,
@@ -174,6 +183,7 @@ export async function deleteBook(id: string) {
   }
   const book = await Book.findByIdAndDelete(id);
   if (!book) throw new NotFoundError('Book not found');
+  await deleteUnreferencedCloudinaryAssets(book.coverAssets ?? []);
   return { archived: false, book: serializeBook(book) };
 }
 

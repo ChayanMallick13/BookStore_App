@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
 import { swaggerSpec } from './config/swagger.js';
@@ -11,6 +12,7 @@ import routes from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import * as paymentService from './services/paymentService.js';
 import { sendError, sendSuccess } from './utils/apiResponse.js';
+import { logger } from './utils/logger.js';
 
 export function createApp() {
   const app = express();
@@ -18,6 +20,23 @@ export function createApp() {
   // Trust the reverse proxy in front of the Render service.
   // This must be set before rate-limiter middleware runs.
   app.set('trust proxy', 1);
+  app.use((req, res, next) => {
+    const requestId = randomUUID();
+    const startedAt = performance.now();
+    res.locals.requestId = requestId;
+    res.setHeader('X-Request-ID', requestId);
+    res.on('finish', () => {
+      const status = res.statusCode;
+      logger.log(status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info', 'HTTP request completed', {
+        requestId,
+        method: req.method,
+        route: req.path,
+        status,
+        durationMs: Math.round(performance.now() - startedAt),
+      });
+    });
+    next();
+  });
 
   app.use(
     helmet({
@@ -29,6 +48,7 @@ export function createApp() {
     cors({
       origin: env.CLIENT_URL,
       credentials: true,
+      exposedHeaders: ['X-Request-ID'],
     }),
   );
 
@@ -79,6 +99,15 @@ export function createApp() {
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
 
+  app.use((req, res, next) => {
+    const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+    const origin = req.get('origin');
+    if (isMutation && origin && origin !== env.CLIENT_URL) {
+      return sendError(res, 'Request origin is not allowed', 403, 'ORIGIN_NOT_ALLOWED');
+    }
+    return next();
+  });
+
   app.use('/uploads', express.static(path.resolve('uploads')));
 
   app.use(
@@ -89,6 +118,7 @@ export function createApp() {
 
   app.use('/api/v1', routes);
 
+  app.use((_req, res) => sendError(res, 'Route not found', 404, 'NOT_FOUND'));
   app.use(errorHandler);
 
   return app;

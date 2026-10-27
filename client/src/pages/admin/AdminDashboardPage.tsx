@@ -46,7 +46,7 @@ export function AdminDashboardPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-ink-400">BookHaven operations</p>
+          <p className="text-xs uppercase tracking-[0.25em] text-ink-400">Books Bin operations</p>
           <h1 className="mt-1 font-serif text-3xl">Dashboard</h1>
         </div>
         <Button asChild variant="accent"><Link to="/admin/books">Manage books <ArrowRight className="h-4 w-4" /></Link></Button>

@@ -3,5 +3,5 @@
   <rect x="32" y="32" width="416" height="576" rx="12" fill="#f8f4ed" stroke="#d8cdbf" stroke-width="2"/>
   <path d="M160 250h160M160 280h160M160 310h112" stroke="#b6a797" stroke-width="8" stroke-linecap="round"/>
   <path d="M240 170c-40 0-72 32-72 72v14h144v-14c0-40-32-72-72-72Z" fill="#d8cdbf"/>
-  <text x="240" y="390" fill="#77695b" font-family="Georgia,serif" font-size="22" text-anchor="middle">BookHaven</text>
+  <text x="240" y="390" fill="#77695b" font-family="Georgia,serif" font-size="22" text-anchor="middle">Books Bin</text>
 </svg>

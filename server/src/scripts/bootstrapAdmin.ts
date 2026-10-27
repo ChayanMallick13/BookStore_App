@@ -3,6 +3,8 @@ import readline from 'readline';
 import bcrypt from 'bcryptjs';
 import { connectDb, disconnectDb } from '../config/db.js';
 import { User } from '../models/User.js';
+import { logger } from '../utils/logger.js';
+import { errorDetails } from '../utils/errorDetails.js';
 
 dotenv.config();
 
@@ -17,7 +19,7 @@ async function prompt(question: string): Promise<string> {
 }
 
 async function run() {
-  const email = process.env.ADMIN_BOOTSTRAP_EMAIL ?? 'admin@bookhaven.local';
+  const email = process.env.ADMIN_BOOTSTRAP_EMAIL ?? 'admin@booksbin.local';
   let password = process.env.ADMIN_BOOTSTRAP_PASSWORD;
   if (!password) {
     password = await prompt('Enter admin password (min 8 chars): ');
@@ -32,9 +34,9 @@ async function run() {
     if (existing.role !== 'admin') {
       existing.role = 'admin';
       await existing.save();
-      console.log('Updated existing user to admin:', email);
+      console.log('Updated the configured account to administrator.');
     } else {
-      console.log('Admin already exists:', email);
+      console.log('Administrator account already exists.');
     }
     await disconnectDb();
     return;
@@ -43,15 +45,15 @@ async function run() {
   const passwordHash = await bcrypt.hash(password, 12);
   await User.create({
     email: email.toLowerCase(),
-    name: 'BookHaven Admin',
+    name: 'Books Bin Admin',
     passwordHash,
     role: 'admin',
   });
-  console.log('Admin provisioned:', email);
+  console.log('Administrator account provisioned.');
   await disconnectDb();
 }
 
 run().catch((err) => {
-  console.error(err);
+  logger.error('Admin bootstrap failed', { operation: 'admin.bootstrap', error: errorDetails(err) });
   process.exit(1);
 });

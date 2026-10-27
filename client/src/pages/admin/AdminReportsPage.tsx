@@ -31,7 +31,7 @@ export function AdminReportsPage() {
       const url = URL.createObjectURL(file);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `bookhaven-sales${from ? `-${from}` : ''}${to ? `-to-${to}` : ''}.csv`;
+      anchor.download = `books-bin-sales${from ? `-${from}` : ''}${to ? `-to-${to}` : ''}.csv`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();

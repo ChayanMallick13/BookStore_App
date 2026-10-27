@@ -4,9 +4,9 @@ export const swaggerSpec = swaggerJsdoc({
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'BookHaven API',
+      title: 'Books Bin API',
       version: '1.0.0',
-      description: 'REST API for BookHaven bookstore',
+      description: 'REST API for Books Bin bookstore',
     },
     servers: [{ url: '/api/v1' }],
     components: {

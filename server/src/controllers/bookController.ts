@@ -1,10 +1,23 @@
 import type { RequestHandler } from 'express';
 import * as bookService from '../services/bookService.js';
 import { sendSuccess } from '../utils/apiResponse.js';
-import { publicUploadPath } from '../middleware/upload.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { logAudit } from '../services/auditService.js';
 import { routeParam } from '../utils/routeParam.js';
+import { uploadBookImage } from '../services/cloudinaryService.js';
+import { deleteUnreferencedCloudinaryAssets } from '../services/cloudinaryCleanupService.js';
+import type { CloudinaryAsset } from '../models/CloudinaryAsset.js';
+
+async function uploadAssets(files: Express.Multer.File[]): Promise<CloudinaryAsset[]> {
+  const uploaded = await Promise.allSettled(files.map((file) => uploadBookImage(file.buffer)));
+  const assets = uploaded.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+  const failure = uploaded.find((result) => result.status === 'rejected');
+  if (failure?.status === 'rejected') {
+    await deleteUnreferencedCloudinaryAssets(assets);
+    throw failure.reason;
+  }
+  return assets;
+}
 
 export const listBooks: RequestHandler = async (req, res, next) => {
   try {
@@ -36,9 +49,15 @@ export const getBook: RequestHandler = async (req, res, next) => {
 export const createBook: RequestHandler = async (req, res, next) => {
   try {
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
-    const coverImages = files.map((f) => publicUploadPath(f.filename));
+    const coverAssets = await uploadAssets(files);
     const user = (req as AuthRequest).user!;
-    const book = await bookService.createBook(req.body, coverImages, String(user._id));
+    let book;
+    try {
+      book = await bookService.createBook(req.body, coverAssets, String(user._id));
+    } catch (error) {
+      await deleteUnreferencedCloudinaryAssets(coverAssets);
+      throw error;
+    }
     await logAudit({
       actorId: user._id,
       action: 'book.create',
@@ -55,10 +74,16 @@ export const createBook: RequestHandler = async (req, res, next) => {
 export const updateBook: RequestHandler = async (req, res, next) => {
   try {
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
-    const coverImages = files.length ? files.map((f) => publicUploadPath(f.filename)) : undefined;
+    const coverAssets = files.length ? await uploadAssets(files) : undefined;
     const user = (req as AuthRequest).user!;
     const bookId = routeParam(req.params.id);
-    const book = await bookService.updateBook(bookId, req.body, coverImages, String(user._id));
+    let book;
+    try {
+      book = await bookService.updateBook(bookId, req.body, coverAssets, String(user._id));
+    } catch (error) {
+      if (coverAssets) await deleteUnreferencedCloudinaryAssets(coverAssets);
+      throw error;
+    }
     await logAudit({
       actorId: user._id,
       action: 'book.update',
