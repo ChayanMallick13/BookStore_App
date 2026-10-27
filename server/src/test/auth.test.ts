@@ -5,6 +5,7 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { setupTestDb, teardownTestDb, getTestApp } from './helpers.js';
 import { User } from '../models/User.js';
+import { buildPasswordResetUrl, resetPassword } from '../services/authService.js';
 import { logger } from '../utils/logger.js';
 
 describe('Auth & authorization', () => {
@@ -180,6 +181,113 @@ describe('Auth & authorization', () => {
       .get('/api/v1/auth/me')
       .set('Cookie', refreshed.headers['set-cookie']);
     expect(profile.status).toBe(200);
+  });
+
+  it('builds a reset URL on the configured frontend route with an encoded token', () => {
+    const url = new URL(buildPasswordResetUrl('abc+/= token'));
+    expect(url.pathname).toBe('/reset-password');
+    expect(url.searchParams.get('token')).toBe('abc+/= token');
+  });
+
+  it('allows signed-out password reset requests and reports a generic response for unknown emails', async () => {
+    const response = await request(app).post('/api/v1/auth/forgot-password').send({
+      email: 'unknown-password-reset@test.com',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.message).toBe('If the email exists, reset instructions were sent.');
+  });
+
+  it('validates password reset input without changing the account', async () => {
+    const user = await User.create({
+      name: 'Reset Validation User',
+      email: 'reset-validation@test.com',
+      passwordHash: await bcrypt.hash('old-password', 12),
+      role: 'customer',
+      emailVerified: true,
+    });
+
+    const response = await request(app).post('/api/v1/auth/reset-password').send({
+      token: 'unused-token',
+      password: 'short',
+    });
+
+    expect(response.status).toBe(422);
+    const unchanged = await User.findById(user._id).select('+passwordHash');
+    expect(await bcrypt.compare('old-password', unchanged!.passwordHash)).toBe(true);
+  });
+
+  it('rejects invalid, expired, and already-used reset tokens', async () => {
+    const rawToken = 'valid-reset-token';
+    const usedToken = 'used-reset-token';
+    const expiredToken = 'expired-reset-token';
+    const hash = (value: string) => crypto.createHash('sha256').update(value).digest('hex');
+    await User.create({
+      name: 'Reset Edge User',
+      email: 'reset-edge@test.com',
+      passwordHash: await bcrypt.hash('old-password', 12),
+      role: 'customer',
+      emailVerified: true,
+      passwordResetToken: hash(rawToken),
+      passwordResetExpires: new Date(Date.now() + 60_000),
+    });
+
+    await expect(resetPassword('missing-reset-token', 'new-password')).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'INVALID_OR_EXPIRED_RESET_TOKEN',
+    });
+
+    await User.updateOne({ email: 'reset-edge@test.com' }, {
+      $set: { passwordResetToken: hash(expiredToken), passwordResetExpires: new Date(Date.now() - 60_000) },
+    });
+    await expect(resetPassword(expiredToken, 'new-password')).rejects.toMatchObject({
+      code: 'INVALID_OR_EXPIRED_RESET_TOKEN',
+    });
+
+    await User.updateOne({ email: 'reset-edge@test.com' }, {
+      $set: { passwordResetToken: hash(usedToken), passwordResetExpires: new Date(Date.now() + 60_000) },
+    });
+    await resetPassword(usedToken, 'new-password');
+    await expect(resetPassword(usedToken, 'new-password')).rejects.toMatchObject({
+      code: 'INVALID_OR_EXPIRED_RESET_TOKEN',
+    });
+  });
+
+  it('resets the password securely, invalidates the token, and changes old-session credentials', async () => {
+    const rawToken = 'success-reset-token';
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const user = await User.create({
+      name: 'Reset Success User',
+      email: 'reset-success@test.com',
+      passwordHash: await bcrypt.hash('old-password', 12),
+      role: 'customer',
+      emailVerified: true,
+      passwordResetToken: tokenHash,
+      passwordResetExpires: new Date(Date.now() + 60_000),
+      refreshTokenVersion: 3,
+    });
+
+    const response = await request(app).post('/api/v1/auth/reset-password').send({
+      token: rawToken,
+      password: 'new-password',
+    });
+
+    expect(response.status).toBe(200);
+    const changed = await User.findById(user._id).select('+passwordHash +passwordResetToken');
+    expect(await bcrypt.compare('old-password', changed!.passwordHash)).toBe(false);
+    expect(await bcrypt.compare('new-password', changed!.passwordHash)).toBe(true);
+    expect(changed!.passwordResetToken).toBeUndefined();
+    expect(changed!.passwordResetExpires).toBeUndefined();
+    expect(changed!.refreshTokenVersion).toBe(4);
+
+    const oldLogin = await request(app).post('/api/v1/auth/login').send({
+      email: 'reset-success@test.com', password: 'old-password',
+    });
+    const newLogin = await request(app).post('/api/v1/auth/login').send({
+      email: 'reset-success@test.com', password: 'new-password',
+    });
+    expect(oldLogin.status).toBe(401);
+    expect(newLogin.status).toBe(200);
   });
 
   it('clears cookies and invalidates the refresh token on logout', async () => {

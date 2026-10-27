@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { User } from '../models/User.js';
-import { AppError, ConflictError, UnauthorizedError, NotFoundError } from '../utils/errors.js';
+import { AppError, ConflictError, UnauthorizedError } from '../utils/errors.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken, type RefreshTokenPayload } from '../utils/jwt.js';
 import { sendEmail } from './emailService.js';
 import { Cart } from '../models/Cart.js';
@@ -178,6 +178,12 @@ function issueTokens(userId: string, role: 'customer' | 'admin', version: number
   };
 }
 
+export function buildPasswordResetUrl(token: string) {
+  const resetUrl = new URL('/reset-password', env.CLIENT_URL);
+  resetUrl.searchParams.set('token', token);
+  return resetUrl.toString();
+}
+
 export async function requestPasswordReset(email: string) {
   const user = await User.findOne({ email: normalizeEmail(email) });
   if (!user) return;
@@ -189,7 +195,7 @@ export async function requestPasswordReset(email: string) {
     {
       to: user.email,
       subject: 'Reset your Books Bin password',
-      html: `<p>Reset your password using this link. It expires in one hour.</p><p><a href="${env.CLIENT_URL}/reset-password?token=${encodeURIComponent(token)}">Reset password</a></p>`,
+      html: `<p>Reset your password using this link. It expires in one hour.</p><p><a href="${buildPasswordResetUrl(token)}">Reset password</a></p>`,
     },
   );
 }
@@ -200,7 +206,13 @@ export async function resetPassword(token: string, newPassword: string) {
     passwordResetToken: hash,
     passwordResetExpires: { $gt: new Date() },
   }).select('+passwordResetToken +passwordResetExpires +passwordHash');
-  if (!user) throw new NotFoundError('Invalid or expired reset token');
+  if (!user) {
+    throw new AppError(
+      'This password reset link is invalid or expired.',
+      404,
+      'INVALID_OR_EXPIRED_RESET_TOKEN',
+    );
+  }
   user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
   user.passwordResetToken = undefined;
   user.passwordResetExpires = undefined;

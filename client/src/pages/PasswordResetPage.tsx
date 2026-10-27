@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -67,7 +67,11 @@ export function ResetPasswordPage() {
       await api.post('/auth/reset-password', { token, password });
       navigate('/login', { replace: true, state: { message: 'Password updated. Sign in with your new password.' } });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to reset your password.');
+      if (reason instanceof ApiError && reason.code === 'INVALID_OR_EXPIRED_RESET_TOKEN') {
+        setError('This reset link is invalid or expired. Request a new link.');
+      } else {
+        setError(reason instanceof Error ? reason.message : 'Unable to reset your password.');
+      }
     } finally {
       setPending(false);
     }
